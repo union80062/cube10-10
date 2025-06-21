@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>10×10 パステルキューブ（ズーム・リセット対応）</title>
+  <style>
+    body {
+      margin: 0;
+      background: #fff;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      perspective: 2000px;
+      touch-action: none;
+      font-family: sans-serif;
+      position: relative;
+    }
+    .wrapper {
+      transform-style: preserve-3d;
+      transition: transform 0.1s ease-out;
+      transform-origin: center center;
+      position: relative;
+    }
+    .face {
+      position: absolute;
+      border: 1px solid #aaa;
+      background-color: #fff;
+      display: grid;
+      box-sizing: border-box;
+    }
+    .cell {
+      border: 0.5px solid #ccc;
+      background-color: #ffffff;
+      box-sizing: border-box;
+      width: 100%;
+      height: 100%;
+    }
+    #controls {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      background: #fff;
+      padding: 8px;
+      border: 1px solid #ccc;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrapper" id="cube"></div>
+
+  <div id="controls">
+    <label for="zoomRange">ズーム：</label>
+    <input type="range" id="zoomRange" min="0.5" max="2" step="0.05" value="1" />
+    <button id="resetView">回転をリセット</button>
+    <button id="colorReset">色を白に</button>
+  </div>
+
+  <script>
+    const wrapper = document.getElementById("cube");
+    const gridSize = 10;
+    const cellSize = 20;
+    const faceSize = gridSize * cellSize;
+    const faceNames = ["front", "back", "right", "left", "top", "bottom"];
+    const colors = ["#ffffff", "#ffd6e8", "#d6ecff", "#d6ffe2"];
+    const allCells = [];
+
+    wrapper.style.width = faceSize + "px";
+    wrapper.style.height = faceSize + "px";
+
+    let rotateX = -20, rotateY = -30;
+    let isDragging = false;
+    let lastX, lastY;
+    let scale = 1;
+
+    function updateTransform() {
+      wrapper.style.transform = `scale(${scale}) rotateX(${rotateX}deg) rotateY(${rotateY}deg)`;
+    }
+
+    function buildCube() {
+      faceNames.forEach(face => {
+        const faceDiv = document.createElement("div");
+        faceDiv.className = "face";
+        faceDiv.style.width = faceSize + "px";
+        faceDiv.style.height = faceSize + "px";
+        faceDiv.style.gridTemplateColumns = `repeat(${gridSize}, 1fr)`;
+        faceDiv.style.gridTemplateRows = `repeat(${gridSize}, 1fr)`;
+
+        const z = faceSize / 2;
+        let t = "";
+        if (face === "front")  t = `translateZ(${z}px)`;
+        if (face === "back")   t = `rotateY(180deg) translateZ(${z}px)`;
+        if (face === "right")  t = `rotateY(90deg) translateZ(${z}px)`;
+        if (face === "left")   t = `rotateY(-90deg) translateZ(${z}px)`;
+        if (face === "top")    t = `rotateX(90deg) translateZ(${z}px)`;
+        if (face === "bottom") t = `rotateX(-90deg) translateZ(${z}px)`;
+        faceDiv.style.transform = t;
+
+        for (let i = 0; i < gridSize * gridSize; i++) {
+          const cell = document.createElement("div");
+          cell.className = "cell";
+          cell.dataset.index = "0";
+          cell.style.backgroundColor = colors[0];
+          cell.addEventListener("click", () => {
+            let idx = parseInt(cell.dataset.index);
+            idx = (idx + 1) % colors.length;
+            cell.dataset.index = idx;
+            cell.style.backgroundColor = colors[idx];
+          });
+          faceDiv.appendChild(cell);
+          allCells.push(cell);
+        }
+
+        wrapper.appendChild(faceDiv);
+      });
+    }
+
+    function startDrag(x, y) {
+      isDragging = true;
+      lastX = x;
+      lastY = y;
+    }
+
+    function drag(x, y) {
+      if (!isDragging) return;
+      rotateY += (x - lastX) * 0.3;
+      rotateX -= (y - lastY) * 0.3;
+      lastX = x;
+      lastY = y;
+      updateTransform();
+    }
+
+    function stopDrag() {
+      isDragging = false;
+    }
+
+    // スライダーによるズーム
+    document.getElementById("zoomRange").addEventListener("input", e => {
+      scale = parseFloat(e.target.value);
+      updateTransform();
+    });
+
+    // 回転＆ズームをリセット
+    document.getElementById("resetView").addEventListener("click", () => {
+      rotateX = -20;
+      rotateY = -30;
+      scale = 1;
+      document.getElementById("zoomRange").value = "1";
+      updateTransform();
+    });
+
+    // 色を白に戻す
+    document.getElementById("colorReset").addEventListener("click", () => {
+      allCells.forEach(cell => {
+        cell.dataset.index = "0";
+        cell.style.backgroundColor = colors[0];
+      });
+    });
+
+    // ピンチによるズーム
+    let lastDistance = null;
+    document.addEventListener("touchmove", e => {
+      if (e.touches.length === 2) {
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        if (lastDistance !== null) {
+          const delta = distance - lastDistance;
+          scale += delta * 0.005;
+          scale = Math.max(0.5, Math.min(2, scale));
+          document.getElementById("zoomRange").value = scale.toFixed(2);
+          updateTransform();
+        }
+        lastDistance = distance;
+      }
+    }, { passive: false });
+
+    document.addEventListener("touchend", e => {
+      if (e.touches.length < 2) lastDistance = null;
+    });
+
+    document.addEventListener("mousedown", e => startDrag(e.clientX, e.clientY));
+    document.addEventListener("mousemove", e => drag(e.clientX, e.clientY));
+    document.addEventListener("mouseup", stopDrag);
+    document.addEventListener("touchstart", e => {
+      if (e.touches.length === 1) startDrag(e.touches[0].clientX, e.touches[0].clientY);
+    });
+    document.addEventListener("touchmove", e => {
+      if (e.touches.length === 1) drag(e.touches[0].clientX, e.touches[0].clientY);
+    });
+    document.addEventListener("touchend", stopDrag);
+
+    buildCube();
+    updateTransform();
+  </script>
+</body>
+</html>
